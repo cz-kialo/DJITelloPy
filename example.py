@@ -6,10 +6,54 @@ import numpy as np
 import time
 
 # Speed of the drone
-S = 30
+S = 60
 # Frames per second of the pygame window display
 FPS = 25
 
+cascPath = "./haar.xml"
+faceCascade = cv2.CascadeClassifier(cascPath)
+
+WEBCAM = False
+
+if WEBCAM:
+    SCREEN_WIDTH = 640
+    SCREEN_HEIGHT = 480 
+else:
+    SCREEN_WIDTH = 960
+    SCREEN_HEIGHT = 720
+
+class MockTello(object):
+
+    def connect(self):
+        return True
+
+    def set_speed(self, a):
+        return True
+
+    def streamoff(self):
+        return True
+
+    def streamon(self):
+        return True  
+
+    def send_rc_control(self, a,b,c,d):
+        pass
+
+    def get_frame_read(self):
+        class FrameReadMock(object):
+            def __init__(self):
+                self.cap = cv2.VideoCapture(0)
+                self.stopped = False
+
+            def stop(self):
+                pass
+
+            @property
+            def frame(self):
+                has, frame = self.cap.read()
+                return frame
+        
+        return FrameReadMock()
 
 class FrontEnd(object):
     """ Maintains the Tello display and moves it through the keyboard keys.
@@ -26,12 +70,15 @@ class FrontEnd(object):
         # Init pygame
         pygame.init()
 
-        # Creat pygame window
-        pygame.display.set_caption(f"Tello video stream")
-        self.screen = pygame.display.set_mode([960, 720])
+        # Create pygame window
+        pygame.display.set_caption("Tello video stream")
+        self.screen = pygame.display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
 
         # Init Tello object that interacts with the Tello drone
-        self.tello = Tello()
+        if WEBCAM:
+            self.tello = MockTello()
+        else:
+            self.tello = Tello()
 
         # Drone velocities between -100~100
         self.for_back_velocity = 0
@@ -64,6 +111,7 @@ class FrontEnd(object):
             print("Could not start video stream")
             return
 
+
         frame_read = self.tello.get_frame_read()
 
         should_stop = False
@@ -86,12 +134,36 @@ class FrontEnd(object):
                 frame_read.stop()
                 break
 
-            pygame.display.set_caption(f"Tello video stream | battery: {self.tello.get_battery()}")
-
             self.screen.fill([0, 0, 0])
-            frame = cv2.cvtColor(frame_read.frame, cv2.COLOR_BGR2RGB)
+            frame = frame_read.frame
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # frame = np.flipud(frame)
+            gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+
+            faces = faceCascade.detectMultiScale(
+                gray,
+                scaleFactor=1.1,
+                minNeighbors=5,
+                minSize=(30, 30),
+                flags=cv2.CASCADE_SCALE_IMAGE
+            )
+            # frame = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
+
+            print(len(faces))
+            for (x, y, w, h) in faces:
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+
+            if len(faces) > 0:
+                center_x = x + w/2
+                center_y = y + h/2
+                self.yaw_velocity = S if center_x < SCREEN_WIDTH/2 else -S
+                self.up_down_velocity = S if center_y < SCREEN_HEIGHT/2 else -S
+            else:
+                self.yaw_velocity = 0
+                self.up_down_velocity = 0
+
             frame = np.rot90(frame)
-            frame = np.flipud(frame)
+
             frame = pygame.surfarray.make_surface(frame)
             self.screen.blit(frame, (0, 0))
             pygame.display.update()
