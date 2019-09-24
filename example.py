@@ -6,7 +6,7 @@ import numpy as np
 import time
 
 # Speed of the drone
-S = 60
+S = 30
 # Frames per second of the pygame window display
 FPS = 25
 
@@ -27,7 +27,7 @@ class FrontEnd(object):
         pygame.init()
 
         # Creat pygame window
-        pygame.display.set_caption("Tello video stream")
+        pygame.display.set_caption(f"Tello video stream")
         self.screen = pygame.display.set_mode([960, 720])
 
         # Init Tello object that interacts with the Tello drone
@@ -85,6 +85,8 @@ class FrontEnd(object):
             if frame_read.stopped:
                 frame_read.stop()
                 break
+
+            pygame.display.set_caption(f"Tello video stream | battery: {self.tello.get_battery()}")
 
             self.screen.fill([0, 0, 0])
             frame = cv2.cvtColor(frame_read.frame, cv2.COLOR_BGR2RGB)
